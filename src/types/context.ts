@@ -2,7 +2,7 @@
  * @license 
  * Interface of the context object used in the agent
  */
-export interface Context {
+export interface AgentContext {
     // Parameters passed to the context, can be of any type.
     params: any;
 
