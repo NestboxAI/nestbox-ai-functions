@@ -27,6 +27,12 @@ jobs:
           node-version: '20.x'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Update package version
+        run: |
+          new_version="1.0.${{ github.run_number }}"
+          jq ".version = \"$new_version\"" package.json > temp.json && mv temp.json package.json
+          echo "Updated version to $new_version"  
+
       - name: Build and Publish Clients to npm
         run: |
           npm install && npm run build
