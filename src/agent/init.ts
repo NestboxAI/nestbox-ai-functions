@@ -25,10 +25,9 @@ export function initAgent(agent: AgentHandler) {
           timestamp: Date.now(),
         };
 
-        console.log("Attempting to send:", message); // Debug log
+        console.log("Attempting to send: ", payload?.eventType);
 
         process.send(message, (err: any) => {
-          // Add callback for confirmation
           if (err) {
             console.error("❌ Send failed:", err);
             return reject(err);
@@ -42,29 +41,24 @@ export function initAgent(agent: AgentHandler) {
     process.on("message", (packet: any) => {
       if (packet.type === "process:msg") {
         const context = packet.data;
-        console.log(context, "context");
 
         const event: AgentEvents = {
           emitQueryCreated: async (payload: any) => {
-            console.log("Emit Query Created", payload);
             payload.eventType = "QUERY_CREATED";
             payload.webhookListiner = "emitQueryCreated";
             await sendMessageToProcess(payload);
           },
           emitQueryCompleted: async (payload: any) => {
-            console.log("Emit Query Completed", payload);
             payload.eventType = "QUERY_COMPLETED";
             payload.webhookListiner = "emitQueryCompleted";
             await sendMessageToProcess(payload);
           },
           emitQueryFailed: async (payload: any) => {
-            console.log("Emit Query Failed", payload);
             payload.eventType = "QUERY_FAILED";
             payload.webhookListiner = "emitQueryFailed";
             await sendMessageToProcess(payload);
           },
           emitEventCreated: async (payload: any) => {
-            console.log("Emit Event Created", payload);
             payload.eventType = "EVENT_CREATED";
             payload.webhookListiner = "emitEventCreated";
             await sendMessageToProcess(payload);
