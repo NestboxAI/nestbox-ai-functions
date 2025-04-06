@@ -21,6 +21,12 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Node.js for npm Publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Build and Publish Clients to npm
         run: |
           npm install && npm run build
