@@ -1,4 +1,4 @@
 /src
-*.md
+README.md
 .github/
 tsconfig.json
