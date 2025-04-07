@@ -1,4 +1,4 @@
-name: Generate the Nextbo AI Agent Handler
+name: Generate the Nextbo AI Functions Client
 on:
   push:
     branches:
