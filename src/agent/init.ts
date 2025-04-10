@@ -1,6 +1,32 @@
 import pm2 from "pm2";
 import { AgentHandler } from "../types/handler";
 import { AgentEvents } from "../types/events";
+import { BaseEventPayload, CompleteEventPayload } from "../types/payload";
+import { AgentContext } from "../types/context";
+
+type EventConfig = {
+  eventType: string;
+  webhookListener: string;
+};
+
+const EVENT_CONFIGS: Record<string, EventConfig> = {
+  queryCreated: {
+    eventType: "QUERY_CREATED",
+    webhookListener: "emitQueryCreated",
+  },
+  queryCompleted: {
+    eventType: "QUERY_COMPLETED",
+    webhookListener: "emitQueryCompleted",
+  },
+  queryFailed: {
+    eventType: "QUERY_FAILED",
+    webhookListener: "emitQueryFailed",
+  },
+  eventCreated: {
+    eventType: "EVENT_CREATED",
+    webhookListener: "emitEventCreated",
+  },
+};
 
 export function initAgent(agent: AgentHandler) {
   pm2.connect((err: any) => {
@@ -11,7 +37,7 @@ export function initAgent(agent: AgentHandler) {
 
     console.log("Connected to PM2");
 
-    async function sendMessageToProcess(payload: any) {
+    async function sendMessageToProcess(payload: any): Promise<void> {
       return new Promise((resolve, reject) => {
         if (!process.send) {
           const err = new Error("IPC unavailable - not running under PM2");
@@ -33,9 +59,28 @@ export function initAgent(agent: AgentHandler) {
             return reject(err);
           }
           console.log("✅ Message acknowledged");
-          resolve({});
+          resolve();
         });
       });
+    }
+
+    function createEventEmitter(
+      context: AgentContext,
+      eventKey: keyof typeof EVENT_CONFIGS
+    ) {
+      return async <T = any>(payload: BaseEventPayload<T>): Promise<CompleteEventPayload<BaseEventPayload<T>>> => {
+        const config = EVENT_CONFIGS[eventKey];
+        const completePayload = {
+          ...payload,
+          eventType: config.eventType,
+          webhookListener: config.webhookListener,
+          queryId: context.queryId,
+          agentId: context.agentId,
+          params: context.params,
+        };
+        await sendMessageToProcess(completePayload);
+        return completePayload;
+      };
     }
 
     process.on("message", (packet: any) => {
@@ -43,26 +88,10 @@ export function initAgent(agent: AgentHandler) {
         const context = packet.data;
 
         const event: AgentEvents = {
-          emitQueryCreated: async (payload: any) => {
-            payload.eventType = "QUERY_CREATED";
-            payload.webhookListiner = "emitQueryCreated";
-            await sendMessageToProcess(payload);
-          },
-          emitQueryCompleted: async (payload: any) => {
-            payload.eventType = "QUERY_COMPLETED";
-            payload.webhookListiner = "emitQueryCompleted";
-            await sendMessageToProcess(payload);
-          },
-          emitQueryFailed: async (payload: any) => {
-            payload.eventType = "QUERY_FAILED";
-            payload.webhookListiner = "emitQueryFailed";
-            await sendMessageToProcess(payload);
-          },
-          emitEventCreated: async (payload: any) => {
-            payload.eventType = "EVENT_CREATED";
-            payload.webhookListiner = "emitEventCreated";
-            await sendMessageToProcess(payload);
-          },
+          emitQueryCreated: createEventEmitter(context, "queryCreated"),
+          emitQueryCompleted: createEventEmitter(context, "queryCompleted"),
+          emitQueryFailed: createEventEmitter(context, "queryFailed"),
+          emitEventCreated: createEventEmitter(context, "eventCreated"),
         };
 
         agent(context, event);
