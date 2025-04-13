@@ -1,7 +1,7 @@
 import pm2 from "pm2";
 import { AgentHandler } from "../types/handler";
 import { AgentEvents } from "../types/events";
-import { BaseEventPayload, CompleteEventPayload } from "../types/payload";
+import { AgentEventPayload } from "../types/payload";
 import { AgentContext } from "../types/context";
 
 type EventConfig = {
@@ -64,23 +64,22 @@ export function initAgent(agent: AgentHandler) {
       });
     }
 
-    function createEventEmitter(
+    async function emit(
       context: AgentContext,
-      eventKey: keyof typeof EVENT_CONFIGS
+      eventKey: keyof typeof EVENT_CONFIGS,
+      payload: AgentEventPayload
     ) {
-      return async <T = any>(payload: BaseEventPayload<T>): Promise<CompleteEventPayload<BaseEventPayload<T>>> => {
-        const config = EVENT_CONFIGS[eventKey];
-        const completePayload = {
-          ...payload,
-          eventType: config.eventType,
-          webhookListener: config.webhookListener,
-          queryId: context.queryId,
-          agentId: context.agentId,
-          params: context.params,
-        };
-        await sendMessageToProcess(completePayload);
-        return completePayload;
+      const config = EVENT_CONFIGS[eventKey];
+      const completePayload = {
+        ...payload,
+        eventType: config.eventType,
+        webhookListener: config.webhookListener,
+        queryId: context.queryId,
+        agentId: context.agentId,
+        params: context.params,
       };
+      await sendMessageToProcess(completePayload);
+      return completePayload;
     }
 
     process.on("message", (packet: any) => {
@@ -88,12 +87,12 @@ export function initAgent(agent: AgentHandler) {
         const context = packet.data;
 
         const event: AgentEvents = {
-          emitQueryCreated: createEventEmitter(context, "queryCreated"),
-          emitQueryCompleted: createEventEmitter(context, "queryCompleted"),
-          emitQueryFailed: createEventEmitter(context, "queryFailed"),
-          emitEventCreated: createEventEmitter(context, "eventCreated"),
+          emitQueryCreated: (payload: AgentEventPayload) => emit(context, "queryCreated", payload),
+          emitQueryCompleted: (payload: AgentEventPayload) => emit(context, "queryCompleted", payload),
+          emitQueryFailed: (payload: AgentEventPayload) => emit(context, "queryFailed", payload),
+          emitEventCreated: (payload: AgentEventPayload) => emit(context, "eventCreated", payload),
         };
-
+        
         agent(context, event);
       }
     });
