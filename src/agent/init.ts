@@ -93,7 +93,14 @@ export function initAgent(agent: AgentHandler) {
           emitEventCreated: (payload: AgentEventPayload) => emit(context, "eventCreated", payload),
         };
         
-        agent(context, event);
+        try {
+          agent(context, event);
+        } catch (e) {
+          event.emitQueryFailed({
+            data: e,
+          });
+          console.error("Error in agent execution:", e);
+        }
       }
     });
 
