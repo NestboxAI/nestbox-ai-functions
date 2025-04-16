@@ -107,5 +107,13 @@ export function initAgent(agent: AgentHandler) {
     process.on("exit", () => {
       console.log("Process exiting, restart if needed.");
     });
+
+    process.on("unhandledRejection", (reason, promise) => {
+      console.error("Unhandled Rejection:", reason);
+    });
+    
+    process.on("uncaughtException", (err) => {
+      console.error("Uncaught Exception:", err);
+    });
   });
 }
