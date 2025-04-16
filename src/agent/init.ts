@@ -105,8 +105,7 @@ export function initAgent(agent: AgentHandler) {
     });
 
     process.on("exit", () => {
-      console.log("Process exiting, disconnecting from PM2...");
-      pm2.disconnect();
+      console.log("Process exiting, restart if needed.");
     });
   });
 }
