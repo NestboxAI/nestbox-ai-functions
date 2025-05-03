@@ -1,8 +1,8 @@
 import pm2 from "pm2";
-import { AgentHandler } from "../types/agent/handler";
-import { AgentEvents } from "../types/agent/events";
-import { AgentEventPayload } from "../types/agent/payload";
-import { AgentContext } from "../types/agent/context";
+import { ChatbotHandler } from "../types/chatbot/handler";
+import { ChatbotEvents } from "../types/chatbot/events";
+import { ChatbotEventPayload } from "../types/chatbot/payload";
+import { ChatbotContext } from "../types/chatbot/context";
 
 type EventConfig = {
   eventType: string;
@@ -28,7 +28,7 @@ const EVENT_CONFIGS: Record<string, EventConfig> = {
   },
 };
 
-export function initAgent(agent: AgentHandler) {
+export function initChatbot(chatbot: ChatbotHandler) {
   pm2.connect((err: any) => {
     if (err) {
       console.error("Error connecting to PM2:", err);
@@ -65,9 +65,9 @@ export function initAgent(agent: AgentHandler) {
     }
 
     async function emit(
-      context: AgentContext,
+      context: ChatbotContext,
       eventKey: keyof typeof EVENT_CONFIGS,
-      payload: AgentEventPayload
+      payload: ChatbotEventPayload
     ) {
       const config = EVENT_CONFIGS[eventKey];
       const completePayload = {
@@ -75,7 +75,7 @@ export function initAgent(agent: AgentHandler) {
         eventType: config.eventType,
         webhookListener: config.webhookListener,
         queryId: context.queryId,
-        agentId: context.agentId,
+        chatbotId: context.chatbotId,
         params: context.params,
       };
       await sendMessageToProcess(completePayload);
@@ -86,20 +86,20 @@ export function initAgent(agent: AgentHandler) {
       if (packet.type === "process:msg") {
         const context = packet.data;
 
-        const event: AgentEvents = {
-          emitQueryCreated: (payload: AgentEventPayload) => emit(context, "queryCreated", payload),
-          emitQueryCompleted: (payload: AgentEventPayload) => emit(context, "queryCompleted", payload),
-          emitQueryFailed: (payload: AgentEventPayload) => emit(context, "queryFailed", payload),
-          emitEventCreated: (payload: AgentEventPayload) => emit(context, "eventCreated", payload),
+        const event: ChatbotEvents = {
+          emitQueryCreated: (payload: ChatbotEventPayload) => emit(context, "queryCreated", payload),
+          emitQueryCompleted: (payload: ChatbotEventPayload) => emit(context, "queryCompleted", payload),
+          emitQueryFailed: (payload: ChatbotEventPayload) => emit(context, "queryFailed", payload),
+          emitEventCreated: (payload: ChatbotEventPayload) => emit(context, "eventCreated", payload),
         };
         
         try {
-          agent(context, event);
+          chatbot(context, event);
         } catch (e) {
           event.emitQueryFailed({
             data: e,
           });
-          console.error("Error in agent execution:", e);
+          console.error("Error in Chatbot execution:", e);
         }
       }
     });

@@ -1,4 +1,4 @@
-import { AgentHandler } from "../types/handler";
+import { AgentHandler } from "../types/agent/handler";
 
 /**
  * 
