@@ -1,6 +1,8 @@
 /**
  * Agents SDK
  */
+import './utils/custom-logger';
+
 export { AgentContext } from './types/agent/context';
 export { AgentEvents } from './types/agent/events';
 export { AgentHandler } from './types/agent/handler';
