@@ -1,4 +1,3 @@
-import pm2 from "pm2";
 import { ChatbotHandler } from "../types/chatbot/handler";
 import { ChatbotEvents } from "../types/chatbot/events";
 import { ChatbotEventPayload } from "../types/chatbot/payload";
@@ -29,11 +28,6 @@ const EVENT_CONFIGS: Record<string, EventConfig> = {
 };
 
 export function initChatbot(chatbot: ChatbotHandler) {
-  pm2.connect((err: any) => {
-    if (err) {
-      console.error("Error connecting to PM2:", err);
-      process.exit(1);
-    }
 
     console.log("Connected to PM2");
 
@@ -115,5 +109,4 @@ export function initChatbot(chatbot: ChatbotHandler) {
     process.on("uncaughtException", (err) => {
       console.error("Uncaught Exception:", err);
     });
-  });
 }
