@@ -2,6 +2,26 @@ import { ChatbotHandler } from "../types/chatbot/handler";
 import { ChatbotEvents } from "../types/chatbot/events";
 import { ChatbotEventPayload } from "../types/chatbot/payload";
 import { ChatbotContext } from "../types/chatbot/context";
+import * as grpc from "@grpc/grpc-js";
+import * as protoLoader from "@grpc/proto-loader";
+import path from "path";
+
+const PROTO_PATH = path.join(process.cwd(), "protos", "agent.proto");
+const packageDef = protoLoader.loadSync(PROTO_PATH, {
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+});
+const protoDescriptor = grpc.loadPackageDefinition(packageDef) as any;
+const AgentService = protoDescriptor.agent.AgentService;
+
+// gRPC client to connect to NestJS
+const client = new AgentService("localhost:50051", grpc.credentials.createInsecure());
+
+// Unique agent ID
+const CHAT_ID = process.argv[2];
 
 type EventConfig = {
   eventType: string;
@@ -29,32 +49,28 @@ const EVENT_CONFIGS: Record<string, EventConfig> = {
 
 export function initChatbot(chatbot: ChatbotHandler) {
 
-    console.log("Connected to PM2");
+    console.log(`Chatbot ${CHAT_ID} starting`);
 
     async function sendMessageToProcess(payload: any): Promise<void> {
       return new Promise((resolve, reject) => {
-        if (!process.send) {
-          const err = new Error("IPC unavailable - not running under PM2");
-          console.error(err.message);
-          return reject(err);
-        }
 
+        console.log("Attempting to send:", payload?.eventType);
+  
         const message = {
-          type: "process:msg",
-          data: { ...payload },
+          data: Buffer.from(JSON.stringify(payload || {}), 'utf8'),
           timestamp: Date.now(),
         };
-
-        console.log("Attempting to send: ", payload?.eventType);
-
-        process.send(message, (err: any) => {
+  
+        client.SendResult(message, (err: any, res: any) => {
           if (err) {
-            console.error("❌ Send failed:", err);
-            return reject(err);
+            console.error("❌ Failed to send result:", err);
+            reject(err);
+          } else {
+            console.log("✅ Result sent successfully:", res);
+            resolve();
           }
-          console.log("✅ Message acknowledged");
-          resolve();
         });
+  
       });
     }
 
@@ -76,10 +92,14 @@ export function initChatbot(chatbot: ChatbotHandler) {
       return completePayload;
     }
 
-    process.on("message", (packet: any) => {
-      if (packet.type === "process:msg") {
-        const context = packet.data;
-
+    function startTaskStream() {
+      console.log(`Connecting TaskStream as ${CHAT_ID}`);
+      const call = client.TaskStream({ agentId: CHAT_ID });
+  
+      call.on("data", (task: any) => {
+        const context  = JSON.parse(task.payload.toString('utf8'));
+        console.log(`Received:`, context);
+        
         const event: ChatbotEvents = {
           emitQueryCreated: (payload: ChatbotEventPayload) => emit(context, "queryCreated", payload),
           emitQueryCompleted: (payload: ChatbotEventPayload) => emit(context, "queryCompleted", payload),
@@ -88,15 +108,28 @@ export function initChatbot(chatbot: ChatbotHandler) {
         };
         
         try {
-          chatbot(context, event);
+          chatbot(context, event); // Call your provided agent logic
         } catch (e) {
           event.emitQueryFailed({
             data: e,
           });
-          console.error("Error in Chatbot execution:", e);
+          console.error("Error in agent execution:", e);
         }
-      }
-    });
+      });
+  
+      call.on("error", (err: any) => {
+        console.error(`TaskStream error:`, err.message || err);
+        setTimeout(startTaskStream, 3000); // Auto-reconnect
+      });
+  
+      call.on("end", () => {
+        console.warn(`TaskStream ended by server`);
+        setTimeout(startTaskStream, 3000); // Auto-reconnect
+      });
+    }
+  
+    // Start listening for tasks
+    startTaskStream();
 
     process.on("exit", () => {
       console.log("Process exiting, restart if needed.");

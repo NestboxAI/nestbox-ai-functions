@@ -49,15 +49,18 @@ const EVENT_CONFIGS: Record<string, EventConfig> = {
 
 export function initAgent(agent: AgentHandler) {
   console.log(`Agent ${AGENT_ID} starting`);
+
   // ✅ Send result to gRPC server
   async function sendMessageToServer(payload: any): Promise<void> {
     return new Promise((resolve, reject) => {
+
       console.log("Attempting to send:", payload?.eventType);
+
       const message = {
         data: Buffer.from(JSON.stringify(payload || {}), 'utf8'),
         timestamp: Date.now(),
       };
-      console.log(message, 'message')
+
       client.SendResult(message, (err: any, res: any) => {
         if (err) {
           console.error("❌ Failed to send result:", err);
@@ -66,61 +69,45 @@ export function initAgent(agent: AgentHandler) {
           console.log("✅ Result sent successfully:", res);
           resolve();
         }
-      }
-      );
+      });
+
     });
   }
 
-  // ✅ Keep your emit logic
   async function emit(
     context: AgentContext,
     eventKey: keyof typeof EVENT_CONFIGS,
     payload: AgentEventPayload
   ) {
-    console.log('inside emit', context, eventKey, payload)
     const config = EVENT_CONFIGS[eventKey];
-
     const completePayload = {
       ...payload,
       eventType: config.eventType,
       webhookListener: config.webhookListener,
       queryId: context.queryId,
       agentId: context.agentId,
-      params: context.params,
+      params: context.params
     };
 
     await sendMessageToServer(completePayload);
     return completePayload;
   }
 
-  // ✅ Start TaskStream to receive tasks from server
   function startTaskStream() {
-    console.log(`[Agent] Connecting TaskStream as ${AGENT_ID}`);
+    console.log(`Connecting TaskStream as ${AGENT_ID}`);
     const call = client.TaskStream({ agentId: AGENT_ID });
 
     call.on("data", (task: any) => {
-      console.log(`[Agent] Received task:`, task);
-      let taskData = JSON.parse(task.payload.toString('utf8'));
-
-      const context: AgentContext = {
-        queryId: taskData.queryId ,
-        agentId: task.agentId,
-        params: taskData.params, // can be expanded if needed
-        webhookGroups: taskData.webhookGroups ,
-        agentName: "testing"
-      };
-      console.log('emiting now', context);
+      const context  = JSON.parse(task.payload.toString('utf8'));
+      console.log(`Received:`, context);
+      
       const event: AgentEvents = {
-        emitQueryCreated: (payload: AgentEventPayload) =>
-          emit(context, "queryCreated", payload),
-        emitQueryCompleted: (payload: AgentEventPayload) =>
-          emit(context, "queryCompleted", payload),
-        emitQueryFailed: (payload: AgentEventPayload) =>
-          emit(context, "queryFailed", payload),
-        emitEventCreated: (payload: AgentEventPayload) =>
-          emit(context, "eventCreated", payload),
+        emitQueryCreated: (payload: AgentEventPayload) => emit(context, "queryCreated", payload),
+        emitQueryCompleted: (payload: AgentEventPayload) => emit(context, "queryCompleted", payload),
+        emitQueryFailed: (payload: AgentEventPayload) => emit(context, "queryFailed", payload),
+        emitEventCreated: (payload: AgentEventPayload) => emit(context, "eventCreated", payload),
       };
-
+      
       try {
         agent(context, event); // Call your provided agent logic
       } catch (e) {
@@ -132,12 +119,12 @@ export function initAgent(agent: AgentHandler) {
     });
 
     call.on("error", (err: any) => {
-      console.error(`[Agent] TaskStream error:`, err.message || err);
+      console.error(`TaskStream error:`, err.message || err);
       setTimeout(startTaskStream, 3000); // Auto-reconnect
     });
 
     call.on("end", () => {
-      console.warn(`[Agent] TaskStream ended by server`);
+      console.warn(`TaskStream ended by server`);
       setTimeout(startTaskStream, 3000); // Auto-reconnect
     });
   }
