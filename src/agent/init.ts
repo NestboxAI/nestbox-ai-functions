@@ -6,7 +6,6 @@ import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 import path from "path";
 
-// Load proto
 const PROTO_PATH = path.join(process.cwd(), "protos", "agent.proto");
 const packageDef = protoLoader.loadSync(PROTO_PATH, {
   keepCase: true,
@@ -22,7 +21,7 @@ const AgentService = protoDescriptor.agent.AgentService;
 const client = new AgentService("localhost:50051", grpc.credentials.createInsecure());
 
 // Unique agent ID
-const AGENT_ID = process.env.AGENT_ID || `agent-${process.pid}`;
+const AGENT_ID = process.argv[2];
 
 type EventConfig = {
   eventType: string;
@@ -50,30 +49,24 @@ const EVENT_CONFIGS: Record<string, EventConfig> = {
 
 export function initAgent(agent: AgentHandler) {
   console.log(`Agent ${AGENT_ID} starting`);
-
   // ✅ Send result to gRPC server
   async function sendMessageToServer(payload: any): Promise<void> {
     return new Promise((resolve, reject) => {
       console.log("Attempting to send:", payload?.eventType);
-
-      client.SendResult(
-        {
-          agentId: AGENT_ID,
-          jobId: payload.jobId || "job-unknown",
-          success: payload.success ?? true,
-          message: "hello from agent ali" ,
-          output: payload.output || "",
-          error: payload.error || "",
-        },
-        (err: any, res: any) => {
-          if (err) {
-            console.error("❌ Failed to send result:", err);
-            reject(err);
-          } else {
-            console.log("✅ Result sent successfully:", res);
-            resolve();
-          }
+      const message = {
+        data: Buffer.from(JSON.stringify(payload || {}), 'utf8'),
+        timestamp: Date.now(),
+      };
+      console.log(message, 'message')
+      client.SendResult(message, (err: any, res: any) => {
+        if (err) {
+          console.error("❌ Failed to send result:", err);
+          reject(err);
+        } else {
+          console.log("✅ Result sent successfully:", res);
+          resolve();
         }
+      }
       );
     });
   }
@@ -84,8 +77,9 @@ export function initAgent(agent: AgentHandler) {
     eventKey: keyof typeof EVENT_CONFIGS,
     payload: AgentEventPayload
   ) {
-    console.log('inside emit', context, eventKey,payload)
+    console.log('inside emit', context, eventKey, payload)
     const config = EVENT_CONFIGS[eventKey];
+
     const completePayload = {
       ...payload,
       eventType: config.eventType,
@@ -94,23 +88,25 @@ export function initAgent(agent: AgentHandler) {
       agentId: context.agentId,
       params: context.params,
     };
+
     await sendMessageToServer(completePayload);
     return completePayload;
   }
 
   // ✅ Start TaskStream to receive tasks from server
   function startTaskStream() {
-    console.log(`[Agent] Connecting TaskStream as ${AGENT_ID}...`);
+    console.log(`[Agent] Connecting TaskStream as ${AGENT_ID}`);
     const call = client.TaskStream({ agentId: AGENT_ID });
 
     call.on("data", (task: any) => {
       console.log(`[Agent] Received task:`, task);
+      let taskData = JSON.parse(task.payload.toString('utf8'));
 
       const context: AgentContext = {
-        queryId: task.jobId || "job-unknown",
-        agentId: AGENT_ID,
-        params: {}, // can be expanded if needed
-        webhookGroups:[],
+        queryId: taskData.queryId ,
+        agentId: task.agentId,
+        params: taskData.params, // can be expanded if needed
+        webhookGroups: taskData.webhookGroups ,
         agentName: "testing"
       };
       console.log('emiting now', context);
