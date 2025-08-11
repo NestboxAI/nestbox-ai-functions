@@ -17,10 +17,11 @@ const packageDef = protoLoader.loadSync(PROTO_PATH, {
 const protoDescriptor = grpc.loadPackageDefinition(packageDef) as any;
 const AgentService = protoDescriptor.agent.AgentService;
 
-// gRPC client to connect to NestJS
-const client = new AgentService("localhost:50051", grpc.credentials.createInsecure());
+const client = new AgentService(
+  "localhost:50051",
+  grpc.credentials.createInsecure()
+);
 
-// Unique agent ID
 const AGENT_ID = process.argv[2];
 
 type EventConfig = {
@@ -29,48 +30,31 @@ type EventConfig = {
 };
 
 const EVENT_CONFIGS: Record<string, EventConfig> = {
-  queryCreated: {
-    eventType: "QUERY_CREATED",
-    webhookListener: "emitQueryCreated",
-  },
-  queryCompleted: {
-    eventType: "QUERY_COMPLETED",
-    webhookListener: "emitQueryCompleted",
-  },
-  queryFailed: {
-    eventType: "QUERY_FAILED",
-    webhookListener: "emitQueryFailed",
-  },
-  eventCreated: {
-    eventType: "EVENT_CREATED",
-    webhookListener: "emitEventCreated",
-  },
+  queryCreated: { eventType: "QUERY_CREATED", webhookListener: "emitQueryCreated" },
+  queryCompleted: { eventType: "QUERY_COMPLETED", webhookListener: "emitQueryCompleted" },
+  queryFailed: { eventType: "QUERY_FAILED", webhookListener: "emitQueryFailed" },
+  eventCreated: { eventType: "EVENT_CREATED", webhookListener: "emitEventCreated" },
 };
 
 export function initAgent(agent: AgentHandler) {
   console.log(`Agent ${AGENT_ID} starting`);
 
-  // ✅ Send result to gRPC server
   async function sendMessageToServer(payload: any): Promise<void> {
     return new Promise((resolve, reject) => {
-
-      console.log("Attempting to send:", payload?.eventType);
-
       const message = {
-        data: Buffer.from(JSON.stringify(payload || {}), 'utf8'),
+        data: Buffer.from(JSON.stringify(payload || {}), "utf8"),
         timestamp: Date.now(),
       };
 
       client.SendResult(message, (err: any, res: any) => {
         if (err) {
-          console.error("❌ Failed to send result:", err);
+          console.error("❌ Failed to send result:", err.message);
           reject(err);
         } else {
-          console.log("✅ Result sent successfully:", res);
+          console.log("✅ Result sent:", res);
           resolve();
         }
       });
-
     });
   }
 
@@ -86,61 +70,86 @@ export function initAgent(agent: AgentHandler) {
       webhookListener: config.webhookListener,
       queryId: context.queryId,
       agentId: context.agentId,
-      params: context.params
+      params: context.params,
     };
 
     await sendMessageToServer(completePayload);
     return completePayload;
   }
 
-  function startTaskStream() {
-    console.log(`Connecting TaskStream as ${AGENT_ID}`);
-    const call = client.TaskStream({ agentId: AGENT_ID });
+  let activeCall: grpc.ClientReadableStream<any> | null = null;
+  let backoffMs = 1000;
+  const MAX_BACKOFF = 30000;
 
-    call.on("data", (task: any) => {
-      const context  = JSON.parse(task.payload.toString('utf8'));
-      console.log(`Received:`, context);
-      
-      const event: AgentEvents = {
-        emitQueryCreated: (payload: AgentEventPayload) => emit(context, "queryCreated", payload),
-        emitQueryCompleted: (payload: AgentEventPayload) => emit(context, "queryCompleted", payload),
-        emitQueryFailed: (payload: AgentEventPayload) => emit(context, "queryFailed", payload),
-        emitEventCreated: (payload: AgentEventPayload) => emit(context, "eventCreated", payload),
-      };
-      
-      try {
-        agent(context, event); // Call your provided agent logic
-      } catch (e) {
-        event.emitQueryFailed({
-          data: e,
-        });
-        console.error("Error in agent execution:", e);
-      }
-    });
-
-    call.on("error", (err: any) => {
-      console.error(`TaskStream error:`, err.message || err);
-      setTimeout(startTaskStream, 3000); // Auto-reconnect
-    });
-
-    call.on("end", () => {
-      console.warn(`TaskStream ended by server`);
-      setTimeout(startTaskStream, 3000); // Auto-reconnect
+  function waitForServerReady(timeout = 2000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const deadline = Date.now() + timeout;
+      client.waitForReady(deadline, (err?: Error) => {
+        if (err) reject(err);
+        else resolve();
+      });
     });
   }
 
-  // Start listening for tasks
+  function startTaskStream() {
+    if (activeCall) return;
+
+    (async () => {
+      try {
+        await waitForServerReady(2000);
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+
+      console.log(`Connecting TaskStream as ${AGENT_ID}`);
+      const call = client.TaskStream({ agentId: AGENT_ID });
+      activeCall = call;
+      backoffMs = 1000; // reset backoff
+
+      call.on("data", (task: any) => {
+        const context = JSON.parse(task.payload.toString("utf8"));
+        console.log(`Received task:`, context);
+
+        const event: AgentEvents = {
+          emitQueryCreated: (payload) => emit(context, "queryCreated", payload),
+          emitQueryCompleted: (payload) => emit(context, "queryCompleted", payload),
+          emitQueryFailed: (payload) => emit(context, "queryFailed", payload),
+          emitEventCreated: (payload) => emit(context, "eventCreated", payload),
+        };
+
+        try {
+          agent(context, event);
+        } catch (e) {
+          event.emitQueryFailed({ data: e });
+        }
+      });
+
+      const onDisconnected = (reason?: any) => {
+        if (activeCall === call) activeCall = null;
+        console.warn(`TaskStream disconnected: ${reason?.message || reason}`);
+        scheduleReconnect();
+      };
+
+      call.on("error", onDisconnected);
+      call.on("end", onDisconnected);
+      call.on("close", onDisconnected);
+    })();
+  }
+
+  function scheduleReconnect() {
+    const jitter = Math.floor(Math.random() * 300);
+    const wait = Math.min(MAX_BACKOFF, backoffMs) + jitter;
+    console.log(`Reconnecting in ${wait}ms`);
+    setTimeout(() => {
+      backoffMs = Math.min(MAX_BACKOFF, backoffMs * 2);
+      startTaskStream();
+    }, wait);
+  }
+
   startTaskStream();
 
-  process.on("exit", () => {
-    console.log("Process exiting, restart if needed.");
-  });
-
-  process.on("unhandledRejection", (reason) => {
-    console.error("Unhandled Rejection:", reason);
-  });
-
-  process.on("uncaughtException", (err) => {
-    console.error("Uncaught Exception:", err);
-  });
+  process.on("exit", () => console.log("Agent exiting"));
+  process.on("unhandledRejection", (reason) => console.error("Unhandled:", reason));
+  process.on("uncaughtException", (err) => console.error("Uncaught:", err));
 }
