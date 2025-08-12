@@ -68,7 +68,7 @@ export function initChatbot(chatbot: ChatbotHandler) {
       eventType: config.eventType,
       webhookListener: config.webhookListener,
       queryId: context.queryId,
-      chatbotId: context.chatbotId,
+      chatbotId: context.agentId,
       params: context.params,
     };
     await sendMessageToProcess(completePayload);
