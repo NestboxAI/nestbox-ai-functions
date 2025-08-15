@@ -68,8 +68,9 @@ export function initChatbot(chatbot: ChatbotHandler) {
       eventType: config.eventType,
       webhookListener: config.webhookListener,
       queryId: context.queryId,
-      chatbotId: context.agentId,
+      chatbotId: context.chatbotId,
       params: context.params,
+      messages: context.messages
     };
     await sendMessageToProcess(completePayload);
     return completePayload;
@@ -77,7 +78,7 @@ export function initChatbot(chatbot: ChatbotHandler) {
 
   let activeCall: grpc.ClientReadableStream<any> | null = null;
   let backoffMs = 1000;
-  const MAX_BACKOFF = 30000;
+  const MAX_BACKOFF = 10000;
 
   function waitForServerReady(timeout = 2000): Promise<void> {
     return new Promise((resolve, reject) => {

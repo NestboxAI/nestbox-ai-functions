@@ -79,7 +79,7 @@ export function initAgent(agent: AgentHandler) {
 
   let activeCall: grpc.ClientReadableStream<any> | null = null;
   let backoffMs = 1000;
-  const MAX_BACKOFF = 30000;
+  const MAX_BACKOFF = 10000;
 
   function waitForServerReady(timeout = 2000): Promise<void> {
     return new Promise((resolve, reject) => {
