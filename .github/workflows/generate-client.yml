@@ -29,7 +29,7 @@ jobs:
 
       - name: Update package version
         run: |
-          new_version="1.0.${{ github.run_number }}"
+          new_version="2.0.${{ github.run_number }}"
           jq ".version = \"$new_version\"" package.json > temp.json && mv temp.json package.json
           echo "Updated version to $new_version"  
 
