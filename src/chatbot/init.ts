@@ -17,9 +17,18 @@ const packageDef = protoLoader.loadSync(PROTO_PATH, {
 const protoDescriptor = grpc.loadPackageDefinition(packageDef) as any;
 const AgentService = protoDescriptor.agent.AgentService;
 
-const client = new AgentService("localhost:50051", grpc.credentials.createInsecure());
-
+let client: any = null;
 const CHAT_ID = process.argv[2];
+
+function getClient() {
+  if (!client) {
+    client = new AgentService(
+      "localhost:50051",
+      grpc.credentials.createInsecure()
+    );
+  }
+  return client;
+}
 
 type EventConfig = {
   eventType: string;
@@ -27,10 +36,22 @@ type EventConfig = {
 };
 
 const EVENT_CONFIGS: Record<string, EventConfig> = {
-  queryCreated: { eventType: "QUERY_CREATED", webhookListener: "emitQueryCreated" },
-  queryCompleted: { eventType: "QUERY_COMPLETED", webhookListener: "emitQueryCompleted" },
-  queryFailed: { eventType: "QUERY_FAILED", webhookListener: "emitQueryFailed" },
-  eventCreated: { eventType: "EVENT_CREATED", webhookListener: "emitEventCreated" },
+  queryCreated: {
+    eventType: "QUERY_CREATED",
+    webhookListener: "emitQueryCreated",
+  },
+  queryCompleted: {
+    eventType: "QUERY_COMPLETED",
+    webhookListener: "emitQueryCompleted",
+  },
+  queryFailed: {
+    eventType: "QUERY_FAILED",
+    webhookListener: "emitQueryFailed",
+  },
+  eventCreated: {
+    eventType: "EVENT_CREATED",
+    webhookListener: "emitEventCreated",
+  },
 };
 
 export function initChatbot(chatbot: ChatbotHandler) {
@@ -45,7 +66,8 @@ export function initChatbot(chatbot: ChatbotHandler) {
         timestamp: Date.now(),
       };
 
-      client.SendResult(message, (err: any, res: any) => {
+      const clientInstance = getClient();
+      clientInstance.SendResult(message, (err: any, res: any) => {
         if (err) {
           console.error("❌ Failed to send result:", err.message);
           reject(err);
@@ -70,7 +92,7 @@ export function initChatbot(chatbot: ChatbotHandler) {
       queryId: context.queryId,
       chatbotId: context.chatbotId,
       params: context.params,
-      messages: context.messages
+      messages: context.messages,
     };
     await sendMessageToProcess(completePayload);
     return completePayload;
@@ -83,7 +105,8 @@ export function initChatbot(chatbot: ChatbotHandler) {
   function waitForServerReady(timeout = 2000): Promise<void> {
     return new Promise((resolve, reject) => {
       const deadline = Date.now() + timeout;
-      client.waitForReady(deadline, (err?: Error) => {
+      const clientInstance = getClient();
+      clientInstance.waitForReady(deadline, (err?: Error) => {
         if (err) reject(err);
         else resolve();
       });
@@ -102,7 +125,8 @@ export function initChatbot(chatbot: ChatbotHandler) {
       }
 
       console.log(`Connecting TaskStream as ${CHAT_ID}`);
-      const call = client.TaskStream({ agentId: CHAT_ID });
+      const clientInstance = getClient();
+      const call = clientInstance.TaskStream({ agentId: CHAT_ID });
       activeCall = call;
       backoffMs = 1000; // reset backoff on success
 
@@ -112,17 +136,19 @@ export function initChatbot(chatbot: ChatbotHandler) {
 
         const event: ChatbotEvents = {
           emitQueryCreated: (payload) => emit(context, "queryCreated", payload),
-          emitQueryCompleted: (payload) => emit(context, "queryCompleted", payload),
+          emitQueryCompleted: (payload) =>
+            emit(context, "queryCompleted", payload),
           emitQueryFailed: (payload) => emit(context, "queryFailed", payload),
           emitEventCreated: (payload) => emit(context, "eventCreated", payload),
         };
 
-        try {
-          chatbot(context, event);
-        } catch (e) {
-          event.emitQueryFailed({ data: e });
-          console.error("Error in chatbot execution:", e);
-        }
+        // Wrap chatbot execution in async context to handle both sync and async errors
+        Promise.resolve()
+          .then(() => chatbot(context, event))
+          .catch((e) => {
+            console.error("Error in chatbot execution:", e);
+            event.emitQueryFailed({ data: e?.message || e });
+          });
       });
 
       const onDisconnected = (reason?: any) => {
@@ -149,7 +175,34 @@ export function initChatbot(chatbot: ChatbotHandler) {
 
   startTaskStream();
 
-  process.on("exit", () => console.log("Process exiting"));
-  process.on("unhandledRejection", (reason) => console.error("Unhandled:", reason));
+  // Enhanced cleanup on process exit
+  function cleanup() {
+    if (activeCall) {
+      activeCall.cancel();
+      activeCall = null;
+    }
+    if (client) {
+      client.close();
+      client = null;
+    }
+  }
+
+  process.on("exit", () => {
+    console.log("Process exiting");
+    cleanup();
+  });
+  process.on("SIGINT", () => {
+    console.log("Received SIGINT, cleaning up...");
+    cleanup();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    console.log("Received SIGTERM, cleaning up...");
+    cleanup();
+    process.exit(0);
+  });
+  process.on("unhandledRejection", (reason) =>
+    console.error("Unhandled:", reason)
+  );
   process.on("uncaughtException", (err) => console.error("Uncaught:", err));
 }
