@@ -1,45 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  createMockGrpcClient,
-  MockGrpcClientReadableStream,
+  MockStreamManager,
   createMockTaskPayload,
   createMockAgentContext,
   createMockChatbotContext,
-  mockGrpc,
-  mockProtoLoader,
 } from '../__mocks__/grpc-client';
 import type { AgentHandler } from '../types/agent/handler';
 import type { ChatbotHandler } from '../types/chatbot/handler';
 
-// Mock the dependencies
-vi.mock('@grpc/grpc-js', () => mockGrpc);
-vi.mock('@grpc/proto-loader', () => mockProtoLoader);
-vi.mock('path', () => ({
-  default: {
-    join: vi.fn(() => '/mock/path/agent.proto'),
-  },
-  join: vi.fn(() => '/mock/path/agent.proto'),
+// Mock the StreamManager
+vi.mock('../common/stream-manager', () => ({
+  StreamManager: MockStreamManager,
 }));
 
 describe('Example Custom Agent/Chatbot Tests', () => {
-  let mockClient: ReturnType<typeof createMockGrpcClient>;
-  let mockCall: MockGrpcClientReadableStream;
   let initAgent: (agent: AgentHandler) => void;
   let initChatbot: (chatbot: ChatbotHandler) => void;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.resetModules();
-    
-    // Setup mock client
-    mockClient = createMockGrpcClient();
-    mockCall = mockClient.TaskStream() as MockGrpcClientReadableStream;
-
-    // Mock the proto descriptor
-    const mockAgentService = vi.fn(() => mockClient);
-    mockGrpc.loadPackageDefinition.mockReturnValue({
-      agent: { AgentService: mockAgentService },
-    });
 
     // Import fresh modules
     const agentModule = await import('../agent/init');
@@ -50,11 +30,10 @@ describe('Example Custom Agent/Chatbot Tests', () => {
 
   describe('Math Agent', () => {
     it('should solve arithmetic problems', async () => {
-      // Create a math agent that processes arithmetic queries
       const mathAgent: AgentHandler = vi.fn(async (context, events) => {
         const { operation, numbers } = context.params;
-        
         let result: number;
+
         switch (operation) {
           case 'add':
             result = numbers.reduce((sum: number, num: number) => sum + num, 0);
@@ -77,19 +56,21 @@ describe('Example Custom Agent/Chatbot Tests', () => {
       });
 
       initAgent(mathAgent);
+      
+      // Get the mock instance
+      const mockInstance = MockStreamManager.mock.results[0].value;
+      
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      mockCall.emitData(createMockTaskPayload(addContext));
+      mockInstance.simulateTask(addContext);
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(mathAgent).toHaveBeenCalledWith(addContext, expect.any(Object));
-      expect(mockClient.SendResult).toHaveBeenCalled();
-
-      const sentData = JSON.parse(mockClient.SendResult.mock.calls[0][0].data.toString('utf8'));
-      expect(sentData).toMatchObject({
-        eventType: 'QUERY_COMPLETED',
-        data: { result: 10, operation: 'add', numbers: [1, 2, 3, 4] },
-      });
+      expect(mockInstance.emit).toHaveBeenCalledWith(
+        addContext,
+        'queryCompleted',
+        { data: { result: 10, operation: 'add', numbers: [1, 2, 3, 4] } }
+      );
     });
 
     it('should handle unsupported operations', async () => {
@@ -106,37 +87,33 @@ describe('Example Custom Agent/Chatbot Tests', () => {
       });
 
       initAgent(mathAgent);
+      
+      // Get the mock instance
+      const mockInstance = MockStreamManager.mock.results[0].value;
+      
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      mockCall.emitData(createMockTaskPayload(invalidContext));
+      mockInstance.simulateTask(invalidContext);
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      const sentData = JSON.parse(mockClient.SendResult.mock.calls[0][0].data.toString('utf8'));
-      expect(sentData).toMatchObject({
-        eventType: 'QUERY_FAILED',
-        data: 'Unsupported operation: divide',
-      });
+      expect(mockInstance.emit).toHaveBeenCalledWith(
+        invalidContext,
+        'queryFailed',
+        { data: 'Unsupported operation: divide' }
+      );
     });
   });
 
   describe('Greeting Chatbot', () => {
     it('should respond to user greetings', async () => {
-      // Create a greeting chatbot
       const greetingChatbot: ChatbotHandler = vi.fn(async (context, events) => {
-        const lastMessage = context.messages[context.messages.length - 1];
-        const userMessage = lastMessage.content.toLowerCase();
-
-        let response: string;
-        if (userMessage.includes('hello') || userMessage.includes('hi')) {
-          response = 'Hello! How can I help you today?';
-        } else if (userMessage.includes('goodbye') || userMessage.includes('bye')) {
-          response = 'Goodbye! Have a great day!';
-        } else {
-          response = "I'm sorry, I only understand greetings right now.";
-        }
-
+        const userMessage = context.messages[context.messages.length - 1];
+        
         await events.emitQueryCompleted({ 
-          data: { response, originalMessage: lastMessage.content } 
+          data: { 
+            response: 'Hello! How can I help you today?',
+            originalMessage: userMessage.content 
+          } 
         });
       });
 
@@ -147,21 +124,27 @@ describe('Example Custom Agent/Chatbot Tests', () => {
       });
 
       initChatbot(greetingChatbot);
+      
+      // Get the mock instance
+      const mockInstance = MockStreamManager.mock.results[0].value;
+      
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      mockCall.emitData(createMockTaskPayload(greetingContext));
+      mockInstance.simulateTask(greetingContext);
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(greetingChatbot).toHaveBeenCalledWith(greetingContext, expect.any(Object));
 
-      const sentData = JSON.parse(mockClient.SendResult.mock.calls[0][0].data.toString('utf8'));
-      expect(sentData).toMatchObject({
-        eventType: 'QUERY_COMPLETED',
-        data: { 
-          response: 'Hello! How can I help you today?',
-          originalMessage: 'Hello there!'
-        },
-      });
+      expect(mockInstance.emit).toHaveBeenCalledWith(
+        greetingContext,
+        'queryCompleted',
+        {
+          data: { 
+            response: 'Hello! How can I help you today?',
+            originalMessage: 'Hello there!'
+          }
+        }
+      );
     });
 
     it('should handle conversation context', async () => {
@@ -173,144 +156,153 @@ describe('Example Custom Agent/Chatbot Tests', () => {
           data: { 
             messageCount,
             lastMessage: lastMessage.content,
-            conversationId: context.chatbotId 
+            conversationSummary: `This conversation has ${messageCount} messages.`
           } 
         });
       });
 
       const conversationContext = createMockChatbotContext({
-        chatbotId: 'conversation-123',
         messages: [
-          { role: 'user', content: 'Hi' },
-          { role: 'assistant', content: 'Hello!' },
-          { role: 'user', content: 'How are you?' }
+          { role: 'assistant', content: 'Hello! How can I help?' },
+          { role: 'user', content: 'I need help with my project' },
+          { role: 'assistant', content: 'Sure! What kind of project?' },
+          { role: 'user', content: 'A web application' }
         ]
       });
 
       initChatbot(contextAwareChatbot);
+      
+      // Get the mock instance
+      const mockInstance = MockStreamManager.mock.results[0].value;
+      
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      mockCall.emitData(createMockTaskPayload(conversationContext));
+      mockInstance.simulateTask(conversationContext);
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      const sentData = JSON.parse(mockClient.SendResult.mock.calls[0][0].data.toString('utf8'));
-      expect(sentData).toMatchObject({
-        eventType: 'QUERY_COMPLETED',
-        data: { 
-          messageCount: 3,
-          lastMessage: 'How are you?',
-          conversationId: 'conversation-123'
-        },
-      });
+      expect(mockInstance.emit).toHaveBeenCalledWith(
+        conversationContext,
+        'queryCompleted',
+        {
+          data: {
+            messageCount: 4,
+            lastMessage: 'A web application',
+            conversationSummary: 'This conversation has 4 messages.'
+          }
+        }
+      );
     });
   });
 
   describe('Data Processing Agent', () => {
     it('should process and transform data', async () => {
-      // Agent that processes arrays of data
       const dataAgent: AgentHandler = vi.fn(async (context, events) => {
-        const { data, operation } = context.params;
+        const { action, data } = context.params;
 
-        let result: any;
-        switch (operation) {
-          case 'sum':
-            result = data.reduce((sum: number, item: any) => sum + item.value, 0);
-            break;
-          case 'filter':
-            result = data.filter((item: any) => item.active === true);
-            break;
-          case 'transform':
-            result = data.map((item: any) => ({ ...item, processed: true }));
-            break;
-          default:
-            throw new Error(`Unknown operation: ${operation}`);
+        if (action === 'sum') {
+          const result = data.reduce((sum: number, num: number) => sum + num, 0);
+          await events.emitQueryCompleted({ data: { result, action } });
+        } else if (action === 'filter') {
+          const result = data.filter((num: number) => num > 5);
+          await events.emitQueryCompleted({ data: { result, action, original: data } });
         }
-
-        await events.emitQueryCompleted({ data: { result, operation } });
       });
-
-      const testData = [
-        { id: 1, value: 10, active: true },
-        { id: 2, value: 20, active: false },
-        { id: 3, value: 30, active: true }
-      ];
 
       // Test sum operation
       const sumContext = createMockAgentContext({
-        params: { data: testData, operation: 'sum' }
+        params: { action: 'sum', data: [10, 20, 30] }
       });
 
       initAgent(dataAgent);
+      
+      // Get the mock instance
+      const mockInstance = MockStreamManager.mock.results[0].value;
+      
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      mockCall.emitData(createMockTaskPayload(sumContext));
+      mockInstance.simulateTask(sumContext);
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      let sentData = JSON.parse(mockClient.SendResult.mock.calls[0][0].data.toString('utf8'));
-      expect(sentData.data.result).toBe(60); // 10 + 20 + 30
+      expect(mockInstance.emit).toHaveBeenCalledWith(
+        sumContext,
+        'queryCompleted',
+        { data: { result: 60, action: 'sum' } }
+      );
 
-      // Reset and test filter operation  
-      mockClient.SendResult.mockClear();
+      // Clear the mock for the next test
+      vi.clearAllMocks();
+
+      // Test filter operation
       const filterContext = createMockAgentContext({
-        params: { data: testData, operation: 'filter' }
+        params: { action: 'filter', data: [1, 3, 8, 12, 4, 9] }
       });
 
-      mockCall.emitData(createMockTaskPayload(filterContext));
+      // Initialize a fresh agent
+      initAgent(dataAgent);
+      const newMockInstance = MockStreamManager.mock.results[0].value;
+
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      sentData = JSON.parse(mockClient.SendResult.mock.calls[0][0].data.toString('utf8'));
-      expect(sentData.data.result).toHaveLength(2); // Only active items
-      expect(sentData.data.result[0].id).toBe(1);
-      expect(sentData.data.result[1].id).toBe(3);
+      newMockInstance.simulateTask(filterContext);
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(newMockInstance.emit).toHaveBeenCalledWith(
+        filterContext,
+        'queryCompleted',
+        { data: { result: [8, 12, 9], action: 'filter', original: [1, 3, 8, 12, 4, 9] } }
+      );
     });
   });
 
   describe('Event Logging Agent', () => {
     it('should emit multiple events during processing', async () => {
-      const eventAgent: AgentHandler = vi.fn(async (context, events) => {
-        // Emit creation event
-        await events.emitQueryCreated({ data: 'Processing started' });
-
-        // Simulate some processing
-        await new Promise(resolve => setTimeout(resolve, 5));
-
-        // Emit custom event
-        await events.emitEventCreated({ 
-          data: { 
-            type: 'processing',
-            step: 'validation',
-            timestamp: Date.now() 
-          } 
+      const loggingAgent: AgentHandler = vi.fn(async (context, events) => {
+        await events.emitQueryCreated({ step: 'started', timestamp: Date.now() });
+        await events.emitEventCreated({ step: 'processing', timestamp: Date.now() });
+        await events.emitQueryCompleted({ 
+          step: 'completed', 
+          result: 'success',
+          timestamp: Date.now() 
         });
-
-        // Complete processing
-        await events.emitQueryCompleted({ data: 'Processing finished' });
       });
 
-      const context = createMockAgentContext({ agentId: 'event-logger' });
+      const context = createMockAgentContext({
+        params: { task: 'multi-step-process' }
+      });
 
-      initAgent(eventAgent);
+      initAgent(loggingAgent);
+      
+      // Get the mock instance
+      const mockInstance = MockStreamManager.mock.results[0].value;
+      
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      mockCall.emitData(createMockTaskPayload(context));
-      await new Promise(resolve => setTimeout(resolve, 20));
+      mockInstance.simulateTask(context);
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Should have 3 SendResult calls (created, event, completed)
-      expect(mockClient.SendResult).toHaveBeenCalledTimes(3);
+      // Should have 3 emit calls (created, event, completed)
+      expect(mockInstance.emit).toHaveBeenCalledTimes(3);
 
-      const calls = mockClient.SendResult.mock.calls;
-      const [createdCall, eventCall, completedCall] = calls.map(
-        call => JSON.parse(call[0].data.toString('utf8'))
+      expect(mockInstance.emit).toHaveBeenNthCalledWith(
+        1,
+        context,
+        'queryCreated',
+        expect.objectContaining({ step: 'started' })
       );
 
-      expect(createdCall.eventType).toBe('QUERY_CREATED');
-      expect(createdCall.data).toBe('Processing started');
+      expect(mockInstance.emit).toHaveBeenNthCalledWith(
+        2,
+        context,
+        'eventCreated',
+        expect.objectContaining({ step: 'processing' })
+      );
 
-      expect(eventCall.eventType).toBe('EVENT_CREATED');
-      expect(eventCall.data.type).toBe('processing');
-
-      expect(completedCall.eventType).toBe('QUERY_COMPLETED');
-      expect(completedCall.data).toBe('Processing finished');
+      expect(mockInstance.emit).toHaveBeenNthCalledWith(
+        3,
+        context,
+        'queryCompleted',
+        expect.objectContaining({ step: 'completed', result: 'success' })
+      );
     });
   });
 });

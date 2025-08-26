@@ -1,64 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  createMockGrpcClient,
-  MockGrpcClientReadableStream,
+  MockStreamManager,
   createMockTaskPayload,
   createMockAgentContext,
   createMockChatbotContext,
-  mockGrpc,
-  mockProtoLoader,
 } from '../__mocks__/grpc-client';
 import type { AgentHandler } from '../types/agent/handler';
 import type { ChatbotHandler } from '../types/chatbot/handler';
 
-// Mock the dependencies before importing the modules under test
-vi.mock('@grpc/grpc-js', () => mockGrpc);
-vi.mock('@grpc/proto-loader', () => mockProtoLoader);
-vi.mock('path', () => ({
-  default: {
-    join: vi.fn(() => '/mock/path/agent.proto'),
-  },
-  join: vi.fn(() => '/mock/path/agent.proto'),
+// Mock the StreamManager
+vi.mock('../common/stream-manager', () => ({
+  StreamManager: MockStreamManager,
 }));
 
 describe('Integration Tests', () => {
-  let mockClient: ReturnType<typeof createMockGrpcClient>;
-  let mockCall: MockGrpcClientReadableStream;
-
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.resetModules();
-    
-    // Setup mock client
-    mockClient = createMockGrpcClient();
-    mockCall = mockClient.TaskStream() as MockGrpcClientReadableStream;
-
-    // Mock the proto descriptor
-    const mockAgentService = vi.fn(() => mockClient);
-    mockGrpc.loadPackageDefinition.mockReturnValue({
-      agent: { AgentService: mockAgentService },
-    });
   });
 
   describe('Agent and Chatbot Integration', () => {
     it('should work with both agent and chatbot using same mock infrastructure', async () => {
-      // Create separate mock clients for each module
-      const agentMockClient = createMockGrpcClient();
-      const chatbotMockClient = createMockGrpcClient();
-      
-      const agentMockCall = agentMockClient.TaskStream() as MockGrpcClientReadableStream;
-      const chatbotMockCall = chatbotMockClient.TaskStream() as MockGrpcClientReadableStream;
-
-      // Mock separate service constructors
-      const mockAgentService = vi.fn()
-        .mockReturnValueOnce(agentMockClient)  // First call for agent
-        .mockReturnValueOnce(chatbotMockClient); // Second call for chatbot
-
-      mockGrpc.loadPackageDefinition.mockReturnValue({
-        agent: { AgentService: mockAgentService },
-      });
-
-      // Import modules
+      // Import modules after mocks are set up
       const agentModule = await import('../agent/init');
       const chatbotModule = await import('../chatbot/init');
       
@@ -83,18 +46,22 @@ describe('Integration Tests', () => {
       initAgent(testAgent);
       initChatbot(testChatbot);
 
-      // Wait for initialization
-      await new Promise(resolve => setTimeout(resolve, 20));
+      // Get the mock instances
+      const agentMockInstance = MockStreamManager.mock.results[0].value;
+      const chatbotMockInstance = MockStreamManager.mock.results[1].value;
 
-      // Send tasks to both (using respective mock calls)
+      // Wait for initialization
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Send tasks to both
       const agentContext = createMockAgentContext({ agentId: 'agent-1' });
       const chatbotContext = createMockChatbotContext({ chatbotId: 'chatbot-1' });
 
-      agentMockCall.emitData(createMockTaskPayload(agentContext));
-      chatbotMockCall.emitData(createMockTaskPayload(chatbotContext));
+      agentMockInstance.simulateTask(agentContext);
+      chatbotMockInstance.simulateTask(chatbotContext);
 
       // Wait for processing
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Verify both handlers were called
       expect(testAgent).toHaveBeenCalledWith(
@@ -117,7 +84,7 @@ describe('Integration Tests', () => {
         })
       );
 
-      // Verify results were collected (each should have been called once)
+      // Verify results were collected
       expect(agentResults).toHaveLength(1);
       expect(chatbotResults).toHaveLength(1);
       
@@ -131,27 +98,20 @@ describe('Integration Tests', () => {
         context: chatbotContext,
       });
 
-      // Verify SendResult was called for both completions (once each)
-      expect(agentMockClient.SendResult).toHaveBeenCalledTimes(1);
-      expect(chatbotMockClient.SendResult).toHaveBeenCalledTimes(1);
+      // Verify emit was called for both completions
+      expect(agentMockInstance.emit).toHaveBeenCalledWith(
+        agentContext,
+        'queryCompleted',
+        { data: 'agent-completed' }
+      );
+      expect(chatbotMockInstance.emit).toHaveBeenCalledWith(
+        chatbotContext,
+        'queryCompleted',
+        { data: 'chatbot-completed' }
+      );
     });
 
     it('should handle errors in both agent and chatbot', async () => {
-      // Create separate mock clients
-      const agentMockClient = createMockGrpcClient();
-      const chatbotMockClient = createMockGrpcClient();
-      
-      const agentMockCall = agentMockClient.TaskStream() as MockGrpcClientReadableStream;
-      const chatbotMockCall = chatbotMockClient.TaskStream() as MockGrpcClientReadableStream;
-
-      const mockAgentService = vi.fn()
-        .mockReturnValueOnce(agentMockClient)
-        .mockReturnValueOnce(chatbotMockClient);
-
-      mockGrpc.loadPackageDefinition.mockReturnValue({
-        agent: { AgentService: mockAgentService },
-      });
-
       const agentModule = await import('../agent/init');
       const chatbotModule = await import('../chatbot/init');
       
@@ -169,55 +129,45 @@ describe('Integration Tests', () => {
       initAgent(errorAgent);
       initChatbot(errorChatbot);
 
-      await new Promise(resolve => setTimeout(resolve, 20));
+      // Get the mock instances
+      const agentMockInstance = MockStreamManager.mock.results[0].value;
+      const chatbotMockInstance = MockStreamManager.mock.results[1].value;
+
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Send tasks that will cause errors
-      agentMockCall.emitData(createMockTaskPayload(createMockAgentContext()));
-      chatbotMockCall.emitData(createMockTaskPayload(createMockChatbotContext()));
+      agentMockInstance.simulateTask(createMockAgentContext());
+      chatbotMockInstance.simulateTask(createMockChatbotContext());
 
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Verify both errors were handled and emitQueryFailed was called
-      expect(agentMockClient.SendResult).toHaveBeenCalledTimes(1);
-      expect(chatbotMockClient.SendResult).toHaveBeenCalledTimes(1);
-      
-      const agentCalls = agentMockClient.SendResult.mock.calls;
-      const chatbotCalls = chatbotMockClient.SendResult.mock.calls;
-      
-      const agentSentData = JSON.parse(agentCalls[0][0].data.toString('utf8'));
-      const chatbotSentData = JSON.parse(chatbotCalls[0][0].data.toString('utf8'));
+      // Verify both errors were handled and emit was called with queryFailed
+      expect(agentMockInstance.emit).toHaveBeenCalledWith(
+        expect.any(Object),
+        'queryFailed',
+        { data: 'Agent error' }
+      );
 
-      expect(agentSentData).toMatchObject({
-        eventType: 'QUERY_FAILED',
-        webhookListener: 'emitQueryFailed',
-        data: 'Agent error',
-      });
-
-      expect(chatbotSentData).toMatchObject({
-        eventType: 'QUERY_FAILED',
-        webhookListener: 'emitQueryFailed',
-        data: 'Chatbot error',
-      });
+      expect(chatbotMockInstance.emit).toHaveBeenCalledWith(
+        expect.any(Object),
+        'queryFailed',
+        { data: 'Chatbot error' }
+      );
     });
   });
 
   describe('Mock Utilities', () => {
     it('should provide comprehensive mock functionality', () => {
-      // Test mock client creation
-      const client = createMockGrpcClient();
-      expect(client.SendResult).toBeDefined();
-      expect(client.TaskStream).toBeDefined();
-      expect(client.waitForReady).toBeDefined();
-      expect(client.close).toBeDefined();
-
-      // Test mock call functionality
-      const call = client.TaskStream();
-      expect(call).toBeInstanceOf(MockGrpcClientReadableStream);
-      expect(call.cancel).toBeDefined();
-      expect(call.emitData).toBeDefined();
-      expect(call.emitError).toBeDefined();
-      expect(call.emitEnd).toBeDefined();
-      expect(call.emitClose).toBeDefined();
+      // Test MockStreamManager functionality
+      const mockInstance = new MockStreamManager({
+        type: 'agent',
+        onTask: vi.fn(),
+      });
+      
+      expect(mockInstance.emit).toBeDefined();
+      expect(mockInstance.simulateTask).toBeDefined();
+      expect(typeof mockInstance.emit).toBe('function');
+      expect(typeof mockInstance.simulateTask).toBe('function');
     });
 
     it('should create proper mock contexts', () => {
