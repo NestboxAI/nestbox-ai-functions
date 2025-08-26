@@ -1,37 +1,27 @@
-name: Generate the Nextbo AI Functions Client
+name: Test PR and Feature Branches
 on:
   push:
+    branches-ignore:
+      - main
+  pull_request:
     branches:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  generate-client:
+  test:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Setup Node.js for npm Publish
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Update package version
-        run: |
-          new_version="2.0.${{ github.run_number }}"
-          jq ".version = \"$new_version\"" package.json > temp.json && mv temp.json package.json
-          echo "Updated version to $new_version"  
 
       - name: Install dependencies
         run: |
@@ -58,16 +48,8 @@ jobs:
         env:
           CI: true
 
-      - name: Build package
+      - name: Build package (verification only)
         run: |
-          echo "Building package..."
+          echo "Verifying build process..."
           npm run build
-          echo "Build completed successfully!"
-
-      - name: Publish to npm
-        run: |
-          echo "Publishing to npm..."
-          npm publish --access public --registry=https://registry.npmjs.org
-          echo "Published successfully!"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          echo "Build verification completed successfully!"
