@@ -44,6 +44,21 @@ export class MockGrpcClientReadableStream extends EventEmitter implements MockGr
   }
 }
 
+// Mock StreamManager class for testing
+export const MockStreamManager = vi.fn().mockImplementation((options: any) => {
+  return {
+    options,
+    emit: vi.fn().mockResolvedValue({ success: true }),
+    sendMessageToServer: vi.fn().mockResolvedValue(undefined),
+    start: vi.fn(),
+    cleanup: vi.fn(),
+    simulateTask: vi.fn((context: any) => {
+      // Call the onTask function with the context
+      options.onTask(context);
+    }),
+  };
+});
+
 export function createMockGrpcClient(): MockGrpcClient {
   const mockCall = new MockGrpcClientReadableStream();
   
