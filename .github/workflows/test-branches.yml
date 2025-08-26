@@ -1,0 +1,55 @@
+name: Test PR and Feature Branches
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm install --prefer-offline --no-audit
+
+      - name: Install platform-specific dependencies
+        run: |
+          # Install Linux-specific Rollup binary for vitest
+          npm install @rollup/rollup-linux-x64-gnu --no-save || echo "Warning: Could not install platform-specific Rollup binary"
+        continue-on-error: true
+
+      - name: Verify test setup
+        run: |
+          echo "Checking test configuration..."
+          npm ls vitest || echo "Vitest not found in dependencies"
+          npm ls @rollup/rollup-linux-x64-gnu || echo "Platform-specific Rollup not found"
+          echo "Running test verification..."
+
+      - name: Run tests
+        run: |
+          echo "Running test suite..."
+          npm test -- --run --reporter=verbose --timeout=10000
+          echo "Tests completed successfully!"
+        env:
+          CI: true
+
+      - name: Build package (verification only)
+        run: |
+          echo "Verifying build process..."
+          npm run build
+          echo "Build verification completed successfully!"
