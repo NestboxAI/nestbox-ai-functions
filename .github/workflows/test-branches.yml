@@ -43,7 +43,7 @@ jobs:
       - name: Run tests
         run: |
           echo "Running test suite..."
-          npm test -- --run --reporter=verbose --timeout=10000
+          npm test -- --run --reporter=verbose
           echo "Tests completed successfully!"
         env:
           CI: true
