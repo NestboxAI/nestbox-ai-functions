@@ -31,7 +31,6 @@ export class StreamManager {
           console.error("❌ Failed to send result:", err.message);
           reject(err);
         } else {
-          console.log("✅ Result sent:", res);
           resolve();
         }
       });
@@ -71,7 +70,6 @@ export class StreamManager {
         return;
       }
 
-      console.log(`Connecting TaskStream as ${this.options.id}`);
       const clientInstance = getClient();
       const call = clientInstance.TaskStream({ agentId: this.options.id });
       this.activeCall = call;
@@ -79,7 +77,6 @@ export class StreamManager {
 
       call.on("data", (task: any) => {
         const context = JSON.parse(task.payload.toString("utf8"));
-        console.log(`Received task:`, context);
         this.options.onTask(context);
       });
 
@@ -106,7 +103,7 @@ export class StreamManager {
   }
 
   start() {
-    console.log(`${this.options.logPrefix} ${this.options.id} starting`);
+    console.log(`🟢 ${this.options.logPrefix} ${this.options.id} starting`);
     this.startTaskStream();
     this.setupProcessHandlers();
   }
@@ -127,12 +124,12 @@ export class StreamManager {
 
     process.on("exit", cleanup);
     process.on("SIGINT", () => {
-      console.log("Received SIGINT, cleaning up...");
+      console.log("🔴 Received SIGINT, cleaning up...");
       this.cleanup();
       process.exit(0);
     });
     process.on("SIGTERM", () => {
-      console.log("Received SIGTERM, cleaning up...");
+      console.log("🔴 Received SIGTERM, cleaning up...");
       this.cleanup();
       process.exit(0);
     });
