@@ -2,6 +2,8 @@ import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 import path from "path";
 
+const GRPC_SERVER_URL = process.argv[3];
+
 let client: any = null;
 
 export function getClient() {
@@ -18,7 +20,7 @@ export function getClient() {
     const AgentService = protoDescriptor.agent.AgentService;
 
     client = new AgentService(
-      "localhost:50051",
+      GRPC_SERVER_URL || "localhost:50051",
       grpc.credentials.createInsecure()
     );
   }

@@ -1,6 +1,5 @@
 import { ChatbotHandler } from "../types/chatbot/handler";
 import { ChatbotEvents } from "../types/chatbot/events";
-import { ChatbotEventPayload } from "../types/chatbot/payload";
 import { ChatbotContext } from "../types/chatbot/context";
 import { StreamManager } from "../common/stream-manager";
 

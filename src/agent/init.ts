@@ -1,6 +1,5 @@
 import { AgentHandler } from "../types/agent/handler";
 import { AgentEvents } from "../types/agent/events";
-import { AgentEventPayload } from "../types/agent/payload";
 import { AgentContext } from "../types/agent/context";
 import { StreamManager } from "../common/stream-manager";
 
