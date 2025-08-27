@@ -124,12 +124,12 @@ export class StreamManager {
 
     process.on("exit", cleanup);
     process.on("SIGINT", () => {
-      console.log("🔴 Received SIGINT, cleaning up...");
+      console.log("Received SIGINT, cleaning up...");
       this.cleanup();
       process.exit(0);
     });
     process.on("SIGTERM", () => {
-      console.log("🔴 Received SIGTERM, cleaning up...");
+      console.log("Received SIGTERM, cleaning up...");
       this.cleanup();
       process.exit(0);
     });
