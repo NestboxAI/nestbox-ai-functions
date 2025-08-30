@@ -1,6 +1,8 @@
 import * as grpc from "@grpc/grpc-js";
 import { getClient, closeClient, waitForServerReady } from "./grpc-client";
 import { EVENT_CONFIGS, EventConfig } from "./event-configs";
+import { AgentContext } from "../types/agent/context";
+import { ChatbotContext } from "../types/chatbot/context";
 
 export interface StreamManagerOptions {
   id: string;
@@ -38,7 +40,7 @@ export class StreamManager {
   }
 
   async emit(
-    context: any,
+    context: AgentContext | ChatbotContext,
     eventKey: keyof typeof EVENT_CONFIGS,
     payload: any
   ) {
@@ -47,12 +49,13 @@ export class StreamManager {
       ...payload,
       eventType: config.eventType,
       webhookListener: config.webhookListener,
+      webhookGroups: context.webhookGroups,
       queryId: context.queryId,
       params: context.params,
       // Include conditional fields based on context type
-      ...(context.agentId && { agentId: context.agentId }),
-      ...(context.chatbotId && { chatbotId: context.chatbotId }),
-      ...(context.messages && { messages: context.messages }),
+      ...('agentId' in context && context.agentId && { agentId: context.agentId }),
+      ...('chatbotId' in context && context.chatbotId && { chatbotId: context.chatbotId }),
+      ...('messages' in context && context.messages && { messages: context.messages }),
     };
 
     await this.sendMessageToServer(completePayload);
