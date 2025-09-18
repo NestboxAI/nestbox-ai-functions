@@ -19,3 +19,9 @@ export { ChatbotEventPayload } from './types/chatbot/payload';
 
 export { useChatbot } from './chatbot/useChatbot';
 export { initChatbot } from './chatbot/init';
+
+/**
+ * Agent Context Store
+ */
+export { getLoggerContext } from "./context/agent-store";
+export { setLoggerContext } from "./context/agent-store";

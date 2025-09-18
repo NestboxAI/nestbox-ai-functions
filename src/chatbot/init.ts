@@ -2,6 +2,7 @@ import { ChatbotHandler } from "../types/chatbot/handler";
 import { ChatbotEvents } from "../types/chatbot/events";
 import { ChatbotContext } from "../types/chatbot/context";
 import { StreamManager } from "../common/stream-manager";
+import { setLoggerContext } from "../context/agent-store";
 
 const CHAT_ID = process.argv[2];
 
@@ -10,6 +11,7 @@ export function initChatbot(chatbot: ChatbotHandler) {
     id: CHAT_ID,
     logPrefix: "Chatbot",
     onTask: (context: ChatbotContext) => {
+      setLoggerContext(context.queryId);
       const event: ChatbotEvents = {
         emitQueryCreated: (payload) => streamManager.emit(context, "queryCreated", payload),
         emitQueryCompleted: (payload) => streamManager.emit(context, "queryCompleted", payload),

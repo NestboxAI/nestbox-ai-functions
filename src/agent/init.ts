@@ -2,6 +2,7 @@ import { AgentHandler } from "../types/agent/handler";
 import { AgentEvents } from "../types/agent/events";
 import { AgentContext } from "../types/agent/context";
 import { StreamManager } from "../common/stream-manager";
+import { setLoggerContext } from "../context/agent-store";
 
 const AGENT_ID = process.argv[2];
 
@@ -10,6 +11,7 @@ export function initAgent(agent: AgentHandler) {
     id: AGENT_ID,
     logPrefix: "Agent",
     onTask: (context: AgentContext) => {
+      setLoggerContext(context.queryId);
       const event: AgentEvents = {
         emitQueryCreated: (payload) => streamManager.emit(context, "queryCreated", payload),
         emitQueryCompleted: (payload) => streamManager.emit(context, "queryCompleted", payload),
