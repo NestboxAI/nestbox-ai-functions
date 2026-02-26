@@ -7,7 +7,7 @@ export { AgentHandler } from './types/agent/handler';
 export { AgentEventPayload } from './types/agent/payload';
 
 export { useAgent } from './agent/useAgent';
-export { initAgent } from './agent/init';
+export { initAgent, InitAgentOptions } from './agent/init';
 
 /**
  * Chatbot SDK
@@ -19,3 +19,9 @@ export { ChatbotEventPayload } from './types/chatbot/payload';
 
 export { useChatbot } from './chatbot/useChatbot';
 export { initChatbot } from './chatbot/init';
+
+/**
+ * Common
+ */
+export { StreamManager, StreamManagerOptions } from './common/stream-manager';
+export { ClaudeAgentClient, ClaudeAgentCallbacks, ClaudeAgentStartContext } from './common/claude-agent-client';

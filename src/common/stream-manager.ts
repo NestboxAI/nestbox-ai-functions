@@ -15,9 +15,23 @@ export class StreamManager {
   private backoffMs = 1000;
   private readonly MAX_BACKOFF = 10000;
   private readonly options: StreamManagerOptions;
+  private messageHandlers: ((payload: any) => boolean)[] = [];
 
   constructor(options: StreamManagerOptions) {
     this.options = options;
+  }
+
+  get id(): string {
+    return this.options.id;
+  }
+
+  /**
+   * Register a generic message hook for non-task messages on the TaskStream.
+   * The handler should return `true` if it consumed the message (prevents
+   * regular onTask processing), or `false` to let it pass through.
+   */
+  onMessage(handler: (payload: any) => boolean): void {
+    this.messageHandlers.push(handler);
   }
 
   async sendMessageToServer(payload: any): Promise<void> {
@@ -79,8 +93,14 @@ export class StreamManager {
       this.backoffMs = 1000; // reset backoff
 
       call.on("data", (task: any) => {
-        const context = JSON.parse(task.payload.toString("utf8"));
-        this.options.onTask(context);
+        const payload = JSON.parse(task.payload.toString("utf8"));
+
+        // Check message hooks first — if any handler consumes it, skip onTask
+        for (const handler of this.messageHandlers) {
+          if (handler(payload)) return;
+        }
+
+        this.options.onTask(payload);
       });
 
       const onDisconnected = (reason?: any) => {

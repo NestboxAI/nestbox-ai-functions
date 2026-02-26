@@ -5,7 +5,12 @@ import { StreamManager } from "../common/stream-manager";
 
 const AGENT_ID = process.argv[2];
 
-export function initAgent(agent: AgentHandler) {
+export interface InitAgentOptions {
+  /** Called with the StreamManager instance after creation but before start(). */
+  onInit?: (streamManager: StreamManager) => void;
+}
+
+export function initAgent(agent: AgentHandler, options?: InitAgentOptions) {
   const streamManager = new StreamManager({
     id: AGENT_ID,
     logPrefix: "Agent",
@@ -26,6 +31,10 @@ export function initAgent(agent: AgentHandler) {
         });
     },
   });
+
+  if (options?.onInit) {
+    options.onInit(streamManager);
+  }
 
   streamManager.start();
 }

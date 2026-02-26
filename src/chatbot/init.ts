@@ -5,7 +5,12 @@ import { StreamManager } from "../common/stream-manager";
 
 const CHAT_ID = process.argv[2];
 
-export function initChatbot(chatbot: ChatbotHandler) {
+export interface InitChatbotOptions {
+  /** Called with the StreamManager instance after creation but before start(). */
+  onInit?: (streamManager: StreamManager) => void;
+}
+
+export function initChatbot(chatbot: ChatbotHandler, options?: InitChatbotOptions) {
   const streamManager = new StreamManager({
     id: CHAT_ID,
     logPrefix: "Chatbot",
@@ -26,6 +31,10 @@ export function initChatbot(chatbot: ChatbotHandler) {
         });
     },
   });
+
+  if (options?.onInit) {
+    options.onInit(streamManager);
+  }
 
   streamManager.start();
 }
