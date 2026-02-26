@@ -16,6 +16,10 @@
   },
   "author": "",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NestboxAI/nestbox-ai-functions"
+  },
   "dependencies": {
     "@grpc/grpc-js": "^1.13.4"
   },
