@@ -3,6 +3,7 @@ import { getClient, closeClient, waitForServerReady } from "./grpc-client";
 import { EVENT_CONFIGS, EventConfig } from "./event-configs";
 import { AgentContext } from "../types/agent/context";
 import { ChatbotContext } from "../types/chatbot/context";
+import { EventFile } from "../types/agent/payload";
 
 export interface StreamManagerOptions {
   id: string;
@@ -56,7 +57,8 @@ export class StreamManager {
   async emit(
     context: AgentContext | ChatbotContext,
     eventKey: keyof typeof EVENT_CONFIGS,
-    payload: any
+    payload: any,
+    files?: EventFile[]
   ) {
     const config = EVENT_CONFIGS[eventKey];
     const completePayload = {
@@ -70,6 +72,7 @@ export class StreamManager {
       ...('agentId' in context && context.agentId && { agentId: context.agentId }),
       ...('chatbotId' in context && context.chatbotId && { chatbotId: context.chatbotId }),
       ...('messages' in context && context.messages && { messages: context.messages }),
+      ...(files && files.length > 0 && { files }),
     };
 
     await this.sendMessageToServer(completePayload);

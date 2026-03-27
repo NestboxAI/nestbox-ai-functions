@@ -16,10 +16,10 @@ export function initAgent(agent: AgentHandler, options?: InitAgentOptions) {
     logPrefix: "Agent",
     onTask: (context: AgentContext) => {
       const event: AgentEvents = {
-        emitQueryCreated: (payload) => streamManager.emit(context, "queryCreated", payload),
-        emitQueryCompleted: (payload) => streamManager.emit(context, "queryCompleted", payload),
-        emitQueryFailed: (payload) => streamManager.emit(context, "queryFailed", payload),
-        emitEventCreated: (payload) => streamManager.emit(context, "eventCreated", payload),
+        emitQueryCreated: (payload, files) => streamManager.emit(context, "queryCreated", payload, files),
+        emitQueryCompleted: (payload, files) => streamManager.emit(context, "queryCompleted", payload, files),
+        emitQueryFailed: (payload, files) => streamManager.emit(context, "queryFailed", payload, files),
+        emitEventCreated: (payload, files) => streamManager.emit(context, "eventCreated", payload, files),
       };
 
       // Wrap agent execution in async context to handle both sync and async errors

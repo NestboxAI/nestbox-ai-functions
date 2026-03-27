@@ -1,3 +1,7 @@
+import { EventFile } from "../agent/payload";
+
+export { EventFile };
+
 /**
  * Base interface for all event payloads (user-provided portion)
  */

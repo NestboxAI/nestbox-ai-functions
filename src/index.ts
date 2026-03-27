@@ -4,7 +4,7 @@
 export { AgentContext } from './types/agent/context';
 export { AgentEvents } from './types/agent/events';
 export { AgentHandler } from './types/agent/handler';
-export { AgentEventPayload } from './types/agent/payload';
+export { AgentEventPayload, EventFile } from './types/agent/payload';
 
 export { useAgent } from './agent/useAgent';
 export { initAgent, InitAgentOptions } from './agent/init';

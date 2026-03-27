@@ -1,4 +1,4 @@
-import { AgentEventPayload } from "./payload";
+import { AgentEventPayload, EventFile } from "./payload";
 
 /**
  * This module defines the Events interface for handling various events in the agent
@@ -8,23 +8,23 @@ export interface AgentEvents {
      * Emits an event when a query is created.
      * @param event - An object containing the data related to the created query.
      */
-    emitQueryCreated(event: AgentEventPayload): Promise<void>;
+    emitQueryCreated(event: AgentEventPayload, files?: EventFile[]): Promise<void>;
 
     /**
      * Emits an event when a query is successfully completed.
      * @param event - An object containing the data related to the completed query.
      */
-    emitQueryCompleted(event: AgentEventPayload): Promise<void>;
+    emitQueryCompleted(event: AgentEventPayload, files?: EventFile[]): Promise<void>;
 
     /**
      * Emits an event when a query fails.
      * @param event - An object containing the data related to the failed query.
      */
-    emitQueryFailed(event: AgentEventPayload): Promise<void>;
+    emitQueryFailed(event: AgentEventPayload, files?: EventFile[]): Promise<void>;
 
     /**
      * Emits an event when a generic event is created.
      * @param event - An object containing the data related to the created event.
      */
-    emitEventCreated(event: AgentEventPayload): Promise<void>;
+    emitEventCreated(event: AgentEventPayload, files?: EventFile[]): Promise<void>;
 }
