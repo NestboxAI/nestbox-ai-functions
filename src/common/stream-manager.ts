@@ -60,9 +60,19 @@ export class StreamManager {
     payload: any,
     files?: EventFile[]
   ) {
+    // Auto-extract files from payload.data if not provided as explicit argument.
+    // The claude-sdk-container places file references inside data.files;
+    // nest-agent expects them at the top level for multipart webhook delivery.
+    const effectiveFiles = files ?? payload?.data?.files;
+    const cleanPayload = { ...payload };
+    if (!files && cleanPayload?.data?.files) {
+      cleanPayload.data = { ...cleanPayload.data };
+      delete cleanPayload.data.files;
+    }
+
     const config = EVENT_CONFIGS[eventKey];
     const completePayload = {
-      ...payload,
+      ...cleanPayload,
       eventType: config.eventType,
       webhookListener: config.webhookListener,
       webhookGroups: context.webhookGroups,
@@ -72,7 +82,7 @@ export class StreamManager {
       ...('agentId' in context && context.agentId && { agentId: context.agentId }),
       ...('chatbotId' in context && context.chatbotId && { chatbotId: context.chatbotId }),
       ...('messages' in context && context.messages && { messages: context.messages }),
-      ...(files && files.length > 0 && { files }),
+      ...(effectiveFiles && effectiveFiles.length > 0 && { files: effectiveFiles }),
     };
 
     await this.sendMessageToServer(completePayload);
