@@ -16,10 +16,10 @@ export function initChatbot(chatbot: ChatbotHandler, options?: InitChatbotOption
     logPrefix: "Chatbot",
     onTask: (context: ChatbotContext) => {
       const event: ChatbotEvents = {
-        emitQueryCreated: (payload, files) => streamManager.emit(context, "queryCreated", payload, files),
-        emitQueryCompleted: (payload, files) => streamManager.emit(context, "queryCompleted", payload, files),
-        emitQueryFailed: (payload, files) => streamManager.emit(context, "queryFailed", payload, files),
-        emitEventCreated: (payload, files) => streamManager.emit(context, "eventCreated", payload, files),
+        emitQueryCreated: (payload, files) => files ? streamManager.emit(context, "queryCreated", payload, files) : streamManager.emit(context, "queryCreated", payload),
+        emitQueryCompleted: (payload, files) => files ? streamManager.emit(context, "queryCompleted", payload, files) : streamManager.emit(context, "queryCompleted", payload),
+        emitQueryFailed: (payload, files) => files ? streamManager.emit(context, "queryFailed", payload, files) : streamManager.emit(context, "queryFailed", payload),
+        emitEventCreated: (payload, files) => files ? streamManager.emit(context, "eventCreated", payload, files) : streamManager.emit(context, "eventCreated", payload),
       };
 
       // Wrap chatbot execution in async context to handle both sync and async errors
