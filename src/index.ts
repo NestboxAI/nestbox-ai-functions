@@ -24,4 +24,11 @@ export { initChatbot } from './chatbot/init';
  * Common
  */
 export { StreamManager, StreamManagerOptions } from './common/stream-manager';
-export { ClaudeAgentClient, ClaudeAgentCallbacks, ClaudeAgentStartContext } from './common/claude-agent-client';
+export {
+  ClaudeAgentClient,
+  ClaudeAgentCallbacks,
+  ClaudeAgentStartContext,
+  AgentEventType,
+  AgentEventsConfig,
+  AgentEventMessage,
+} from './common/claude-agent-client';
